@@ -12,8 +12,8 @@ class MyApp extends StatelessWidget {
     return const MaterialApp(
       title: 'Flutter Demo',
       home: MyHomePage(
-        start: -2,
-        end: 2,
+        start: 0.0001,
+        end: 1,
         n: 1000,
       ),
     );
@@ -38,26 +38,18 @@ class MyHomePage extends StatefulWidget {
 
 class _MyHomePageState extends State<MyHomePage> {
   int? _selectedXIndex;
-  double parabola(double x) => x*x;
-  double seno(double x) => math.sin(2 * math.pi * x);
-  double parabolaSeno(double x) => parabola(x) * seno(x);
+  double x(double t) => t * math.sin(1 / t * 10 * math.pi);
+  double y(double t) => t * math.cos(1 / t * 10 * math.pi);
 
   @override
   Widget build(BuildContext context) {
     final domain = List<double>.generate(widget.n,
         (i) => widget.start + i * (widget.end - widget.start) / (widget.n - 1));
 
-    final values1 = domain
-        .map<math.Point<double>>((x) => math.Point<double>(x, parabola(x)))
-        .toList();
-
-    final values2 = domain
-        .map<math.Point<double>>((x) => math.Point<double>(x, seno(x)))
-        .toList();
-
-    final values3 = domain
-        .map<math.Point<double>>((x) => math.Point<double>(x, parabolaSeno(x)))
-        .toList();
+    final values = List.generate(
+      widget.n,
+      (i) => math.Point<double>(x(domain[i]), y(domain[i])),
+    );
 
     return Scaffold(
       appBar: AppBar(
@@ -68,36 +60,65 @@ class _MyHomePageState extends State<MyHomePage> {
         child: LayoutBuilder(
           builder: (context, constraints) {
             return GestureDetector(
-              onPanStart: (panStart) {
-                final panStartX = (widget.end - widget.start) *
-                        panStart.localPosition.dx /
-                        constraints.maxWidth +
-                    widget.start;
-                final diffs = List<MapEntry<int, double>>.generate(
-                  widget.n,
-                  (i) =>
-                      MapEntry<int, double>(i, (domain[i] - panStartX).abs()),
-                );
-                diffs.sort((a, b) => a.value.compareTo(b.value));
-                setState(() => _selectedXIndex = diffs.first.key);
-              },
+              // onPanStart: (panStart) {
+              //   final panStartX = (widget.end - widget.start) *
+              //           panStart.localPosition.dx /
+              //           constraints.maxWidth +
+              //       widget.start;
+              //   final diffs = List<MapEntry<int, double>>.generate(
+              //     widget.n,
+              //     (i) =>
+              //         MapEntry<int, double>(i, (domain[i] - panStartX).abs()),
+              //   );
+              //   diffs.sort((a, b) => a.value.compareTo(b.value));
+              //   setState(() => _selectedXIndex = diffs.first.key);
+              // },
               onPanUpdate: (panUpdate) {
-                final panStartX = (widget.end - widget.start) *
-                    panUpdate.localPosition.dx /
-                    constraints.maxWidth +
-                    widget.start;
+                final valuesSortedByX = [...values]
+                  ..sort((a, b) => a.x.compareTo(b.x));
+                final valuesSortedByY = [...values]
+                  ..sort((a, b) => a.y.compareTo(b.y));
+                print(
+                    'O gráfico vai de ${valuesSortedByX.first.x}<=x<=${valuesSortedByX.last.x}'
+                    '\n${valuesSortedByY.first.y}<=y<=${valuesSortedByX.last.y}');
+
+                final minX = valuesSortedByX.first.x;
+                final maxX = valuesSortedByX.last.x;
+                final minY = valuesSortedByY.first.y;
+                final maxY = valuesSortedByY.last.y;
+                final deltaX = maxX - minX;
+                final deltaY = maxY - minY;
+
+                final panStartX =
+                    deltaX * panUpdate.localPosition.dx / constraints.maxWidth +
+                        minX;
+
+                final panStartY = deltaY *
+                        (1 -
+                            panUpdate.localPosition.dy /
+                                constraints.maxHeight) +
+                    minY;
+
                 final diffs = List<MapEntry<int, double>>.generate(
                   widget.n,
-                      (i) =>
-                      MapEntry<int, double>(i, (domain[i] - panStartX).abs()),
+                  (i) => MapEntry<int, double>(
+                    i,
+                    values[i].distanceTo(
+                      math.Point<double>(panStartX, panStartY),
+                    ),
+                  ),
                 );
+
                 diffs.sort((a, b) => a.value.compareTo(b.value));
                 setState(() => _selectedXIndex = diffs.first.key);
               },
               child: CustomPaint(
                 size: Size(constraints.maxWidth, constraints.maxHeight),
                 painter: Slider2DPainter(
-                  values: [values1, values2, values3],
+                  values: [
+                    values,
+                    // values2, values3,
+                  ],
                   selectedXIndex: _selectedXIndex,
                 ),
               ),
@@ -164,7 +185,8 @@ class Slider2DPainter extends CustomPainter {
         paints[i],
       );
       if (selectedXIndex != null) {
-        canvas.drawCircle(_remap(values[i][selectedXIndex!]), 10, paints[i]);
+        canvas.drawCircle(
+            _remap(values[i][selectedXIndex!]), 10, paints[i + 1]);
       }
     }
     // canvas.drawPoints(PointMode.lines, [center, value], paint);
