@@ -11,31 +11,41 @@ class MyApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return const MaterialApp(
       title: 'Flutter Demo',
-      home: MyHomePage(),
+      home: MyHomePage(
+        start: -2,
+        end: 2,
+        n: 1000,
+      ),
     );
   }
 }
 
 class MyHomePage extends StatefulWidget {
-  const MyHomePage({super.key});
+  const MyHomePage({
+    required this.start,
+    required this.end,
+    required this.n,
+    super.key,
+  }) : assert(start < end);
+
+  final double start;
+  final double end;
+  final int n;
 
   @override
   State<MyHomePage> createState() => _MyHomePageState();
 }
 
 class _MyHomePageState extends State<MyHomePage> {
-  double parabola(double x) => math.cos(2 * math.pi * x);
+  int? _selectedXIndex;
+  double parabola(double x) => x*x;
   double seno(double x) => math.sin(2 * math.pi * x);
   double parabolaSeno(double x) => parabola(x) * seno(x);
 
   @override
   Widget build(BuildContext context) {
-    double start = 2;
-    double end = -2;
-    int n = 1000;
-
-    final domain =
-        List<double>.generate(n, (i) => start + i * (end - start) / (n - 1));
+    final domain = List<double>.generate(widget.n,
+        (i) => widget.start + i * (widget.end - widget.start) / (widget.n - 1));
 
     final values1 = domain
         .map<math.Point<double>>((x) => math.Point<double>(x, parabola(x)))
@@ -57,9 +67,40 @@ class _MyHomePageState extends State<MyHomePage> {
         padding: const EdgeInsets.all(100.0),
         child: LayoutBuilder(
           builder: (context, constraints) {
-            return CustomPaint(
-              size: Size(constraints.maxWidth, constraints.maxHeight),
-              painter: Slider2DPainter(values: [values1, values2, values3]),
+            return GestureDetector(
+              onPanStart: (panStart) {
+                final panStartX = (widget.end - widget.start) *
+                        panStart.localPosition.dx /
+                        constraints.maxWidth +
+                    widget.start;
+                final diffs = List<MapEntry<int, double>>.generate(
+                  widget.n,
+                  (i) =>
+                      MapEntry<int, double>(i, (domain[i] - panStartX).abs()),
+                );
+                diffs.sort((a, b) => a.value.compareTo(b.value));
+                setState(() => _selectedXIndex = diffs.first.key);
+              },
+              onPanUpdate: (panUpdate) {
+                final panStartX = (widget.end - widget.start) *
+                    panUpdate.localPosition.dx /
+                    constraints.maxWidth +
+                    widget.start;
+                final diffs = List<MapEntry<int, double>>.generate(
+                  widget.n,
+                      (i) =>
+                      MapEntry<int, double>(i, (domain[i] - panStartX).abs()),
+                );
+                diffs.sort((a, b) => a.value.compareTo(b.value));
+                setState(() => _selectedXIndex = diffs.first.key);
+              },
+              child: CustomPaint(
+                size: Size(constraints.maxWidth, constraints.maxHeight),
+                painter: Slider2DPainter(
+                  values: [values1, values2, values3],
+                  selectedXIndex: _selectedXIndex,
+                ),
+              ),
             );
           },
         ),
@@ -70,8 +111,11 @@ class _MyHomePageState extends State<MyHomePage> {
 
 class Slider2DPainter extends CustomPainter {
   final List<List<math.Point<double>>> values;
-
-  const Slider2DPainter({required this.values});
+  final int? selectedXIndex;
+  const Slider2DPainter({
+    required this.values,
+    this.selectedXIndex,
+  });
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -108,23 +152,20 @@ class Slider2DPainter extends CustomPainter {
     final deltaX = maxX - minX;
     final deltaY = maxY - minY;
 
-    TextSpan span = new TextSpan(style: new TextStyle(color: Colors.grey[600]), text: 'Yrfc');
-
-
+    Offset _remap(math.Point<double> p) => Offset(
+          size.width * (p.x - minX) / deltaX,
+          size.height * (1 - (p.y - minY) / deltaY),
+        );
 
     for (int i = 0; i < values.length; i++) {
       canvas.drawPoints(
         PointMode.polygon,
-        values[i]
-            .map(
-              (p) => Offset(
-                size.width * (p.x - minX) / deltaX,
-                size.height * (1 - (p.y - minY) / deltaY),
-              ),
-            )
-            .toList(),
+        values[i].map(_remap).toList(),
         paints[i],
       );
+      if (selectedXIndex != null) {
+        canvas.drawCircle(_remap(values[i][selectedXIndex!]), 10, paints[i]);
+      }
     }
     // canvas.drawPoints(PointMode.lines, [center, value], paint);
     // canvas.drawPoints(PointMode.points, [value], massPaint);
